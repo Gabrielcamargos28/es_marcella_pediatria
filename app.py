@@ -46,6 +46,7 @@ COLORS = px.colors.qualitative.Plotly
 # FUNÇÕES AUXILIARES PARA VISUALIZAÇÃO
 # ==============================================
 
+
 def create_pretty_boxplot(df, x, y, title, color_map=None):
     """Cria um boxplot estilizado"""
     fig = px.box(df, x=x, y=y, color=x if color_map is None else None,
@@ -298,6 +299,43 @@ def show_statistical_tests(df):
     with col2:
         st.metric("Valor-p", f"{p:.4f}", 
                  "Significativo" if p < 0.05 else "Não Significativo")
+        
+def show_confidence_intervals(df):
+    st.markdown("### Intervalos de Confiança (95%) para Variáveis Numéricas")
+    
+    for var in ['PESO', 'ESTATURA', 'PC', 'PT']:
+        data = df[var].dropna()
+        mean = data.mean()
+        sem = stats.sem(data)
+        ci = stats.t.interval(0.95, len(data)-1, loc=mean, scale=sem)
+
+        st.write(f"**{var}**:")
+        st.write(f"Média: {mean:.2f}")
+        st.write(f"IC 95%: ({ci[0]:.2f}, {ci[1]:.2f})")
+
+def show_proportional_analysis(df):
+    st.markdown("### Proporção de RCs (Sexo Feminino, Sangue Tipo O, RH+, com Anomalia)")
+    
+    total_rc = len(df)
+    filtro = (df['SEXO'] == 'F') & (df['SANGUE'] == 'O') & (df['RH'] == '+') & (df['ANOMALIA'] == 'SIM')
+    count = df[filtro].shape[0]
+    prop = (count / total_rc) * 100
+
+    st.write(f"Número de RCs com essas características: {count}")
+    st.write(f"Proporção: {prop:.2f}%")
+
+def show_normality_tests(df):
+    st.markdown("### Teste de Normalidade (Shapiro-Wilk)")
+    
+    for var in ['PESO', 'ESTATURA', 'PC', 'PT']:
+        data = df[var].dropna()
+        stat, p = stats.shapiro(data)
+        st.write(f"**{var}**: Estatística W = {stat:.4f}, p-valor = {p:.4f}")
+        if p > 0.05:
+            st.success(f"A distribuição de {var} **é normal** (p > 0.05)")
+        else:
+            st.warning(f"A distribuição de {var} **não é normal** (p ≤ 0.05)")
+
 
 def show_regression_analysis(df):
     """Mostra análise de regressão"""
@@ -352,7 +390,10 @@ def main():
     analysis_option = st.sidebar.radio(
         "Selecione a Análise:",
         ["Visão Geral", "Análise Descritiva", "Análise Comparativa", 
-         "Testes Estatísticos", "Análise de Regressão"]
+         "Testes Estatísticos", "Análise de Regressão",
+         "Intervalos de Confiança Peso,Estatura,PC,PT",
+         "Proporção de (RC) feminino com sangue tipo O, RH+ e portadores de anomalia",
+         "Teste de Normalidade (Shapiro-Wilk)"]
     )
     
     # Carregar dados
@@ -370,6 +411,12 @@ def main():
             show_statistical_tests(df)
         elif analysis_option == "Análise de Regressão":
             show_regression_analysis(df)
+        elif analysis_option == "Intervalos de Confiança Peso,Estatura,PC,PT":
+            show_confidence_intervals(df)
+        elif analysis_option == "Proporção de (RC) feminino com sangue tipo O, RH+ e portadores de anomalia":
+            show_proportional_analysis(df)
+        elif analysis_option == "Teste de Normalidade (Shapiro-Wilk)":
+            show_normality_tests(df)
         
         # Rodapé
         st.sidebar.markdown("---")
@@ -378,6 +425,7 @@ def main():
             Dados de Pediatria (Arango, 2001)  
             Desenvolvido com Python e Streamlit
         """)
+
 
 if __name__ == "__main__":
     main()
