@@ -317,7 +317,7 @@ def show_proportional_analysis(df):
     st.markdown("### Proporção de RCs (Sexo Feminino, Sangue Tipo O, RH+, com Anomalia)")
     
     total_rc = len(df)
-    filtro = (df['SEXO'] == 'F') & (df['SANGUE'] == 'O') & (df['RH'] == '+') & (df['ANOMALIA'] == 'SIM')
+    filtro = (df['SEXO'] == 'F') & (df['SANGUE'] == 'O') & (df['RH'] == 'POS') & (df['ANOMALIA'] == 'SIM')
     count = df[filtro].shape[0]
     prop = (count / total_rc) * 100
 
