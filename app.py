@@ -258,47 +258,33 @@ def show_comparative_analysis(df):
     st.plotly_chart(fig, use_container_width=True)
 
 def show_statistical_tests(df):
-    """Mostra resultados de testes estatísticos"""
-    st.markdown('<h2 class="section-header">Testes Estatísticos</h2>', unsafe_allow_html=True)
-    
-    # Teste T com visualização
-    st.markdown("### Comparação de Médias (Teste T)")
-    for var in VARS_NUMERICAS:
-        col1, col2 = st.columns([1, 2])
-        with col1:
-            group_m = df[df['SEXO'] == 'M'][var].dropna()
-            group_f = df[df['SEXO'] == 'F'][var].dropna()
-            t, p = stats.ttest_ind(group_m, group_f)
-            
-            st.metric(f"Diferença de {var} entre sexos", 
-                     f"{group_m.mean() - group_f.mean():.2f}")
-            st.metric("Valor-p", f"{p:.4f}", 
-                     "Significativo" if p < 0.05 else "Não Significativo")
-        
-        with col2:
-            fig = go.Figure()
-            fig.add_trace(go.Box(y=group_m, name='Masculino', marker_color=COLORS[0]))
-            fig.add_trace(go.Box(y=group_f, name='Feminino', marker_color=COLORS[1]))
-            fig.update_layout(title=f"Distribuição de {var} por Sexo",
-                            template="plotly_white")
-            st.plotly_chart(fig, use_container_width=True)
-    
+    st.markdown("### 5. Comparação de Proporções: Sexo vs Anomalia")
+
+    # Tabela de contingência
+    cont_table = pd.crosstab(df["SEXO"], df["ANOMALIA"])
+    st.write("Tabela de Contingência:")
+    st.dataframe(cont_table)
+
     # Teste Qui-quadrado
-    st.markdown("### Associação entre Variáveis Categóricas")
-    cont_table = pd.crosstab(df['SEXO'], df['ANOMALIA'])
-    chi2, p, _, _ = stats.chi2_contingency(cont_table)
-    
-    fig = px.bar(cont_table.reset_index(), x='SEXO', y=['SIM', 'NÃO'], 
-                barmode='group', title="Distribuição de Anomalias por Sexo",
-                color_discrete_sequence=[COLORS[3], COLORS[4]])
-    st.plotly_chart(fig, use_container_width=True)
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("Qui-quadrado", f"{chi2:.2f}")
-    with col2:
-        st.metric("Valor-p", f"{p:.4f}", 
-                 "Significativo" if p < 0.05 else "Não Significativo")
+    chi2, p, dof, expected = stats.chi2_contingency(cont_table)
+    st.write(f"Valor do Qui-Quadrado: {chi2:.2f}")
+    st.write(f"p-valor: {p:.4f}")
+    if p < 0.05:
+        st.success("Há evidência estatística de associação entre sexo e presença de anomalia.")
+    else:
+        st.info("Não há evidência estatística de associação entre sexo e presença de anomalia.")
+
+    # Proporções com IC
+    st.write("Proporção de anomalias por sexo com intervalo de confiança:")
+    for sexo in df["SEXO"].unique():
+        subset = df[df["SEXO"] == sexo]
+        n = len(subset)
+        x = sum(subset["ANOMALIA"] == "SIM")
+        prop = x / n
+        se = np.sqrt(prop * (1 - prop) / n)
+        ci_low, ci_high = prop - 1.96 * se, prop + 1.96 * se
+        st.write(f"Sexo {sexo}: {prop:.2%} (IC 95%: {ci_low:.2%} - {ci_high:.2%})")
+
         
 def show_confidence_intervals(df):
     st.markdown("### Intervalos de Confiança (95%) para Variáveis Numéricas")
@@ -379,6 +365,137 @@ def show_regression_analysis(df):
         with st.expander("Ver detalhes do modelo"):
             st.text(model.summary())
 
+import plotly.express as px
+
+import plotly.express as px
+
+def compare_means_by_sex(df):
+    st.markdown('<h2 class="section-header">Comparação de Médias por Sexo</h2>', unsafe_allow_html=True)
+
+    variaveis = {
+        "T_GEST": "Tempo Gestacional",
+        "PESO": "Peso",
+        "ESTATURA": "Estatura",
+        "PC": "Perímetro Cefálico",
+        "PT": "Perímetro Torácico"
+    }
+
+    for var, nome in variaveis.items():
+        st.markdown(f"### {nome} por Sexo")
+
+        # Cálculo da média e desvio padrão por sexo
+        resumo = df.groupby("SEXO")[var].agg(["mean", "std", "count"]).reset_index()
+        resumo.columns = ["SEXO", "Média", "Desvio Padrão", "Total"]
+
+        # Formatação para exibir as médias e desvios padrão com 2 casas decimais
+        resumo["Média"] = resumo["Média"].apply(lambda x: f"{x:.2f}")
+        resumo["Desvio Padrão"] = resumo["Desvio Padrão"].apply(lambda x: f"{x:.2f}")
+        
+        # Gráfico de barras
+        fig = px.bar(
+            resumo,
+            x="SEXO",
+            y="Média",
+            error_y="Desvio Padrão",
+            color="SEXO",
+            color_discrete_map={'M': COLORS[0], 'F': COLORS[1]},
+            labels={"SEXO": "Sexo", "Média": f"Média de {nome}"},
+            title=f"Média de {nome} por Sexo"
+        )
+        fig.update_layout(showlegend=False)
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Tabela de estatísticas (com as colunas formatadas)
+        st.dataframe(resumo)
+
+        # Testes de normalidade
+        shapiro_m = stats.shapiro(df[df["SEXO"] == "M"][var])
+        shapiro_f = stats.shapiro(df[df["SEXO"] == "F"][var])
+
+        normal_m = shapiro_m.pvalue > 0.05
+        normal_f = shapiro_f.pvalue > 0.05
+
+        # Teste estatístico
+        if normal_m and normal_f:
+            test_stat, p_value = stats.ttest_ind(
+                df[df["SEXO"] == "M"][var],
+                df[df["SEXO"] == "F"][var],
+                equal_var=False
+            )
+            metodo = "t de Student (variâncias desiguais)"
+        else:
+            test_stat, p_value = stats.mannwhitneyu(
+                df[df["SEXO"] == "M"][var],
+                df[df["SEXO"] == "F"][var],
+                alternative='two-sided'
+            )
+            metodo = "Mann-Whitney"
+
+        st.write(f"**Método:** {metodo}")
+        st.write(f"**Estatística do teste:** {test_stat:.3f}")
+        st.write(f"**p-valor:** {p_value:.4f}")
+        if p_value < 0.05:
+            st.success("Diferença estatisticamente significativa entre os sexos.")
+        else:
+            st.info("Sem diferença estatisticamente significativa entre os sexos.")
+
+        st.markdown(f"### {nome} por Sexo")
+
+        # Cálculo da média e desvio padrão por sexo
+        resumo = df.groupby("SEXO")[var].agg(["mean", "std", "count"]).reset_index()
+        resumo.columns = ["SEXO", "Média", "Desvio Padrão", "N"]
+        
+
+        # Gráfico de barras
+        fig = px.bar(
+            resumo,
+            x="SEXO",
+            y="Média",
+            error_y="Desvio Padrão",
+            color="SEXO",
+            color_discrete_map={'M': COLORS[0], 'F': COLORS[1]},
+            labels={"SEXO": "Sexo", "Média": f"Média de {nome}"},
+            title=f"Média de {nome} por Sexo"
+        )
+        fig.update_layout(showlegend=False)
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Tabela de estatísticas
+        st.dataframe(resumo)
+
+        # Testes de normalidade
+        shapiro_m = stats.shapiro(df[df["SEXO"] == "M"][var])
+        shapiro_f = stats.shapiro(df[df["SEXO"] == "F"][var])
+
+        
+
+        normal_m = shapiro_m.pvalue > 0.05
+        normal_f = shapiro_f.pvalue > 0.05
+
+        # Teste estatístico
+        if normal_m and normal_f:
+            test_stat, p_value = stats.ttest_ind(
+                df[df["SEXO"] == "M"][var],
+                df[df["SEXO"] == "F"][var],
+                equal_var=False
+            )
+            metodo = "t de Student (variâncias desiguais)"
+        else:
+            test_stat, p_value = stats.mannwhitneyu(
+                df[df["SEXO"] == "M"][var],
+                df[df["SEXO"] == "F"][var],
+                alternative='two-sided'
+            )
+            metodo = "Mann-Whitney"
+
+        st.write(f"**Método:** {metodo}")
+        st.write(f"**Estatística do teste:** {test_stat:.3f}")
+        st.write(f"**p-valor:** {p_value:.4f}")
+        if p_value < 0.05:
+            st.success("Diferença estatisticamente significativa entre os sexos.")
+        else:
+            st.info("Sem diferença estatisticamente significativa entre os sexos.")
+
 # ==============================================
 # INTERFACE PRINCIPAL
 # ==============================================
@@ -393,7 +510,7 @@ def main():
          "Testes Estatísticos", "Análise de Regressão",
          "Intervalos de Confiança Peso,Estatura,PC,PT",
          "Proporção de (RC) feminino com sangue tipo O, RH+ e portadores de anomalia",
-         "Teste de Normalidade (Shapiro-Wilk)"]
+         "Teste de Normalidade (Shapiro-Wilk)", "Comparação de Médias Tempo Gestacional, Peso, Sexo..."]
     )
     
     # Carregar dados
@@ -417,6 +534,8 @@ def main():
             show_proportional_analysis(df)
         elif analysis_option == "Teste de Normalidade (Shapiro-Wilk)":
             show_normality_tests(df)
+        elif analysis_option == "Comparação de Médias Tempo Gestacional, Peso, Sexo...":
+            compare_means_by_sex(df)
         
         # Rodapé
         st.sidebar.markdown("---")
